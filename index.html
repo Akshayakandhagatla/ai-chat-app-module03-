@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Chat Assistant — Module 03</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #f4f6f9; margin: 0; display: flex; justify-content: center; padding: 20px; }
+    .app { width: 100%; max-width: 680px; background: #fff; border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,0.08); overflow: hidden; display: flex; flex-direction: column; height: 88vh; }
+    .header { background: #1e293b; color: #fff; padding: 14px 18px; }
+    .header h2 { margin: 0; font-size: 1.1rem; }
+    .config { padding: 10px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; flex-wrap: wrap; }
+    .config input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; }
+    .chat-box { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 80%; padding: 10px 14px; border-radius: 10px; line-height: 1.45; font-size: 0.92rem; white-space: pre-wrap; }
+    .user { align-self: flex-end; background: #2563eb; color: #fff; }
+    .assistant { align-self: flex-start; background: #e2e8f0; color: #0f172a; }
+    .system-note { align-self: center; font-size: 0.78rem; color: #64748b; }
+    .input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e2e8f0; }
+    .input-row input { flex: 1; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
+    .input-row button { background: #2563eb; color: #fff; border: none; padding: 0 18px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    .clear-btn { background: #64748b !important; padding: 0 12px !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h2>AI Chat Application (Module 03 — LLM APIs)</h2>
+    </div>
+
+    <div class="config">
+      <input type="password" id="apiKey" placeholder="Optional: Paste Gemini API Key (or leave blank for Demo Mode)" />
+      <input type="text" id="systemPrompt" value="You are a concise, helpful technical study assistant." placeholder="Custom System Instruction" />
+    </div>
+
+    <div class="chat-box" id="chatBox">
+      <div class="system-note">Session initialized • Chat history & custom system instructions active</div>
+    </div>
+
+    <div class="input-row">
+      <input type="text" id="userInput" placeholder="Ask something..." onkeydown="if(event.key==='Enter') sendMessage()" />
+      <button onclick="sendMessage()">Send</button>
+      <button class="clear-btn" onclick="clearChat()">Clear</button>
+    </div>
+  </div>
+
+  <script>
+    const chatBox = document.getElementById("chatBox");
+    let chatHistory = [];
+
+    function appendMessage(role, text) {
+      const div = document.createElement("div");
+      div.className = `msg ${role}`;
+      div.textContent = text;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function clearChat() {
+      chatHistory = [];
+      chatBox.innerHTML = '<div class="system-note">Chat history cleared</div>';
+    }
+
+    async function sendMessage() {
+      const inputEl = document.getElementById("userInput");
+      const apiKey = document.getElementById("apiKey").value.trim();
+      const systemInstruction = document.getElementById("systemPrompt").value.trim();
+      const userText = inputEl.value.trim();
+      if (!userText) return;
+
+      inputEl.value = "";
+      appendMessage("user", userText);
+      chatHistory.push({ role: "user", parts: [{ text: userText }] });
+
+      // Keep last 6 turns to manage token usage
+      const recentHistory = chatHistory.slice(-6);
+
+      if (!apiKey) {
+        const reply = `[Demo Mode Response]\nSystem Role: "${systemInstruction}"\nHistory Turns Tracked: ${chatHistory.length}\n\nYou asked: "${userText}". Add a Gemini API key above anytime to switch from local demo mode to live LLM API responses!`;
+        chatHistory.push({ role: "model", parts: [{ text: reply }] });
+        appendMessage("assistant", reply);
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
+              contents: recentHistory,
+              generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
+            })
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || "API request failed");
+
+        const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response returned.";
+        chatHistory.push({ role: "model", parts: [{ text: aiReply }] });
+        appendMessage("assistant", aiReply);
+      } catch (err) {
+        appendMessage("assistant", `Error: ${err.message}`);
+      }
+    }
+  </script>
+</body>
+</html>
